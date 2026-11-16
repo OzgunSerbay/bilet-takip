@@ -411,6 +411,11 @@ def bildir(baslik: str, metin: str, link: str | None = None) -> None:
     if not BULUT:
         windows_bildirimi(baslik, metin, link)
     telefon_bildirimi(baslik, metin, link)
+    try:
+        import push_bildirim
+        push_bildirim.gonder(baslik, metin, link, log)
+    except Exception as e:
+        log(f"Uygulama bildirimi hatası: {e!r}")
 
 
 # ---------- Ana kontrol ----------
@@ -468,6 +473,11 @@ def uygulama_verisi_yaz(ucuslar: list[dict], g: dict) -> None:
 
 
 def kontrol() -> None:
+    try:
+        import push_bildirim
+        push_bildirim.abonelikleri_guncelle(log)
+    except Exception as e:
+        log(f"Bildirim abonelikleri güncellenemedi: {e!r}")
     bugun = dt.date.today()
     gunler = [t for t in tarihler() if dt.date.fromisoformat(t) >= bugun]
     if not gunler:

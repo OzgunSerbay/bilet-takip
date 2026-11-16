@@ -80,6 +80,13 @@
   .topic { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   .topic code { flex: 1; background: var(--chip); padding: 9px 10px; border-radius: 10px; font-size: 13px; overflow-x: auto; white-space: nowrap; }
   .topic button { background: var(--accent-soft); color: var(--accent); padding: 9px 12px; font-weight: 600; }
+  .push { display: flex; align-items: center; gap: 12px; }
+  .push > div { flex: 1; }
+  .push.on { background: var(--good-soft); }
+  .push.on b { color: var(--good); }
+  .btn-primary.small { margin: 0; padding: 10px 14px; white-space: nowrap; font-size: 14px; }
+  .btn-primary[disabled] { opacity: .6; }
+  .ghost { background: transparent; color: var(--muted); padding: 8px 10px; border: 1px solid var(--line); font-size: 13px; }
   .skeleton { color: var(--muted); text-align: center; padding: 60px 0; }
 </style>
 </head>
@@ -169,6 +176,8 @@ function render() {
       <a class="btn-primary" href="${esc(best.link)}" target="_blank" rel="noopener">Bileti gör</a>
     </section>` : `<section class="card empty">Bu seçim için uçuş bulunamadı.</section>`}
 
+    ${pushKart()}
+
     <section class="card">
       <h2>Günlere göre en ucuz</h2>
       <div class="days">
@@ -199,8 +208,8 @@ function render() {
     </section>
 
     <section class="card note">
-      <h2>🔔 Bildirimler</h2>
-      <p>Fiyat düşünce ve her saat başı özet bildirimi <b>ntfy</b> uygulamasıyla gelir. Play Store'dan ntfy'ı kur, <b>+</b> tuşuna bas ve şu konuya abone ol:</p>
+      <h2>ℹ️ Bilgi</h2>
+      <p>İstersen bildirimleri <b>ntfy</b> uygulamasıyla da alabilirsin; ntfy'da şu konuya abone ol:</p>
       <div class="topic"><code id="topic">${esc(d.ntfy)}</code><button id="copy">Kopyala</button></div>
       <p style="margin-top:12px">Fiyatlar Google Uçuşlar'dan, 1 yetişkin, tek yön, sadece direkt uçuşlar. Tren bileti fiyata dahil değil; tren süreleri yaklaşık. "Kesin" fiyatlar havayolunun valizli paketinden gelir; diğerlerinde bilete tahmini valiz ücreti eklenmiştir.</p>
     </section>
@@ -209,6 +218,8 @@ function render() {
   document.querySelectorAll("[data-city]").forEach(b => b.onclick = () => { state.city = b.dataset.city; state.showAll = false; render(); });
   document.querySelectorAll("[data-day]").forEach(b => b.onclick = () => { state.day = state.day === b.dataset.day ? null : b.dataset.day; state.showAll = false; render(); });
   const more = $("#more"); if (more) more.onclick = () => { state.showAll = !state.showAll; render(); };
+  const pac = $("#push-ac"); if (pac) pac.onclick = bildirimAc;
+  const pkap = $("#push-kapat"); if (pkap) pkap.onclick = bildirimKapat;
   const copy = $("#copy");
   if (copy) copy.onclick = async () => {
     try { await navigator.clipboard.writeText(d.ntfy); copy.textContent = "Kopyalandı ✓"; }
@@ -244,6 +255,81 @@ function chart(d) {
   </section>`;
 }
 
+// ---------- Bildirimler (web push) ----------
+const VAPID_PUBLIC = "BMxrnsaKJ_Ufv9_INfDfbbQfnnSnkTrCWROiRPuTYORx77O4SIH3fWgj6rH0sSMOc3TYnSeTyLFwC5zgwAASg34";
+const KAYIT_KONU = "bilet-takip-kayit-190dd53c21394ec6";
+state.push = "bilinmiyor"; // yok | kapali | acik | engelli | bekliyor | hata
+state.pushHata = "";
+
+function pushDestek() {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+async function pushDurum() {
+  if (!pushDestek()) { state.push = "yok"; return; }
+  if (Notification.permission === "denied") { state.push = "engelli"; return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    state.push = sub ? "acik" : "kapali";
+  } catch { state.push = "kapali"; }
+}
+function b64ToBytes(s) {
+  const pad = "=".repeat((4 - s.length % 4) % 4);
+  const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+async function kayitGonder(islem, sub) {
+  const r = await fetch(`https://ntfy.sh/${KAYIT_KONU}`, {
+    method: "POST",
+    body: JSON.stringify({ islem, abonelik: sub.toJSON() }),
+  });
+  if (!r.ok) throw new Error("kayıt " + r.status);
+}
+async function bildirimAc() {
+  state.push = "bekliyor"; render();
+  try {
+    const izin = await Notification.requestPermission();
+    if (izin !== "granted") { state.push = izin === "denied" ? "engelli" : "kapali"; render(); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC) });
+    await kayitGonder("ekle", sub);
+    reg.showNotification("🔔 Bildirim izni verildi", {
+      body: "Kayıt tamam. Fiyat bildirimleri bir sonraki saat başı kontrolden itibaren gelecek.",
+      icon: "icon-192.png", badge: "icon-192.png", tag: "bilet-takip-izin",
+    });
+    state.push = "acik";
+  } catch (e) {
+    state.push = "hata"; state.pushHata = String(e && e.message || e);
+  }
+  render();
+}
+async function bildirimKapat() {
+  state.push = "bekliyor"; render();
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) { try { await kayitGonder("sil", sub); } catch {} await sub.unsubscribe(); }
+    state.push = "kapali";
+  } catch (e) { state.push = "hata"; state.pushHata = String(e && e.message || e); }
+  render();
+}
+function pushKart() {
+  const s = state.push;
+  if (s === "bilinmiyor") return "";
+  if (s === "acik") return `<section class="card push on"><div><b>🔔 Bildirimler açık</b>
+      <div class="sub">Fiyat düşünce ve her saat başı bu telefona bildirim gelir.</div></div>
+      <button class="ghost" id="push-kapat">Kapat</button></section>`;
+  if (s === "yok") return `<section class="card push"><div><b>🔕 Bu tarayıcı bildirim desteklemiyor</b>
+      <div class="sub">Android'de Chrome ile açıp uygulamayı ana ekrana yüklersen bildirim açabilirsin.</div></div></section>`;
+  if (s === "engelli") return `<section class="card push"><div><b>🔕 Bildirim izni kapalı</b>
+      <div class="sub">Telefon Ayarları → Uygulamalar → Chrome (veya Bilet Takip) → Bildirimler kısmından izin ver, sonra bu sayfayı yenile.</div></div></section>`;
+  const hata = s === "hata" ? `<div class="sub" style="color:var(--warn)">Olmadı: ${esc(state.pushHata)}. İnternetini kontrol edip tekrar dene.</div>` : "";
+  return `<section class="card push"><div><b>🔔 Fiyat düşünce haber alalım mı?</b>
+      <div class="sub">Başka uygulama gerekmez, bildirim doğrudan buraya gelir.</div>${hata}</div>
+      <button class="btn-primary small" id="push-ac" ${s === "bekliyor" ? "disabled" : ""}>${s === "bekliyor" ? "Açılıyor…" : "Bildirimleri aç"}</button></section>`;
+}
+
 async function load() {
   const btn = $("#refresh");
   btn.classList.add("spin");
@@ -264,6 +350,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) load
 setInterval(() => state.data && render(), 60000);
 load();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+pushDurum().then(() => state.data && render());
 </script>
 </body>
 </html>

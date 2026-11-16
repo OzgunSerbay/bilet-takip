@@ -1,3 +1,4 @@
 primp>=2.0
 selectolax>=1.0
 playwright>=1.50
+pywebpush>=2.0
