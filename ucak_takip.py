@@ -189,7 +189,26 @@ def saat(t) -> str:
     return f"{t[0] or 0:02d}:{t[1] or 0:02d}"
 
 
-def ucuslari_getir(tarih: str, kalkislar: list[str], varislar: list[str]) -> list[dict]:
+def grup_ara(tarih: str, kalkislar: list[str], varislar: list[str]) -> tuple[list[dict], bool]:
+    """Bir havalimanı grubunu arar; Google hata verirse grubu ikiye bölüp tekrar dener.
+    (uçuşlar, eksik_mi) döndürür."""
+    try:
+        sonuc = ucuslari_getir(tarih, kalkislar, varislar)
+    except Exception as e:
+        log(f"{tarih} {','.join(kalkislar)} için fiyat alınamadı: {e!r}")
+        sonuc = None
+    if sonuc is not None:
+        return sonuc, False
+    if len(kalkislar) == 1:
+        log(f"{tarih} {kalkislar[0]} için Google hata verdi, bu kontrolde atlandı")
+        return [], True
+    yari = len(kalkislar) // 2
+    a, eksik_a = grup_ara(tarih, kalkislar[:yari], varislar)
+    b, eksik_b = grup_ara(tarih, kalkislar[yari:], varislar)
+    return a + b, eksik_a or eksik_b
+
+
+def ucuslari_getir(tarih: str, kalkislar: list[str], varislar: list[str]) -> list[dict] | None:
     r = istemci().get("https://www.google.com/travel/flights/search",
                       params={"tfs": arama_tfs(tarih, kalkislar, varislar), "hl": "tr", "gl": ULKE, "curr": PARA_BIRIMI})
     script = LexborHTMLParser(r.text).css_first(r"script.ds\:1")
@@ -197,8 +216,7 @@ def ucuslari_getir(tarih: str, kalkislar: list[str], varislar: list[str]) -> lis
         raise RuntimeError(f"Google sayfasında uçuş verisi yok (HTTP {r.status_code}, {str(r.url)[:80]})")
     veri = script.text().split("data:", 1)[1].rsplit(",", 1)[0]
     if veri.endswith("errorHasStatus: true"):
-        log(f"[tanı] {tarih} {','.join(kalkislar)}: Google hata döndü")
-        return []
+        return None  # Google hata döndü (grup bölünüp tekrar denenir)
     payload = json.loads(veri)
     tekil = {}
     for grup in (payload[2], payload[3]):  # "en iyi" + "diğer" uçuşlar
@@ -241,14 +259,18 @@ def _fiyat(metin: str) -> int | None:
 
 def valizli_fiyat_sayfadan(sayfa, u: dict) -> tuple[int | None, str]:
     """Rezervasyon sayfasından valiz dahil en ucuz paketi bulur. (fiyat, paket adı)"""
-    sayfa.goto(rezervasyon_linki(u), wait_until="networkidle", timeout=45000)
-    try:
-        sayfa.wait_for_selector("text=Rezervasyon seçenekleri", timeout=15000)
-    except Exception:
-        if BULUT:
-            ozet_metin = " ".join(sayfa.inner_text("body").split())[:400]
-            log(f"[tanı] {u['ucus_no']} rezervasyon sayfası beklenmedik: {sayfa.url[:120]} | {ozet_metin}")
-        return None, ""
+    for deneme in range(2):  # Google bazen "Maalesef bir sorun oluştu" diyor: bir kez daha dene
+        sayfa.goto(rezervasyon_linki(u), wait_until="networkidle", timeout=45000)
+        try:
+            sayfa.wait_for_selector("text=Rezervasyon seçenekleri", timeout=15000)
+            break
+        except Exception:
+            if deneme == 0:
+                sayfa.wait_for_timeout(3000)
+                continue
+            ozet_metin = " ".join(sayfa.inner_text("body").split())[:160]
+            log(f"{u['ucus_no']} ({u['tarih']}) valizli paketler okunamadı, tahmini ücret kullanılacak | {ozet_metin}")
+            return None, ""
     metin = sayfa.inner_text("body")
     bas = metin.find("Rezervasyon seçenekleri")
     son = metin.find("Fiyatlara 1 yetişkin", bas)
@@ -448,15 +470,12 @@ def kontrol() -> None:
     kodlar = list(KALKIS)
     gruplar = [kodlar[i:i + GRUP_BOYUTU] for i in range(0, len(kodlar), GRUP_BOYUTU)]
     ucuslar = []
+    eksik = False
     for t in gunler:
         for grup in gruplar:
-            try:
-                yeni = ucuslari_getir(t, grup, list(VARIS))
-                if BULUT:
-                    log(f"[tanı] {t} {','.join(grup)}: {len(yeni)} uçuş")
-                ucuslar += yeni
-            except Exception as e:
-                log(f"{t} {','.join(grup)} için fiyat alınamadı: {e!r}")
+            yeni, grup_eksik = grup_ara(t, grup, list(VARIS))
+            eksik = eksik or grup_eksik
+            ucuslar += yeni
     if not ucuslar:
         log("Hiç uçuş/fiyat bulunamadı (Google cevap vermemiş olabilir), sonraki kontrolde tekrar denenecek.")
         return
@@ -474,6 +493,11 @@ def kontrol() -> None:
 
     g = gecmis_oku()
     onceki_en_dusuk, onceki_son = g["en_dusuk"], g["son"]
+    if eksik and (onceki_son is None or fiyat >= onceki_son):
+        # Bazı şehirler taranamadı: bulunan fiyat gerçek en ucuz olmayabilir, yanlış "arttı" demeyelim.
+        # (Daha ucuz bir fiyat bulunduysa o gerçektir, aşağıda normal şekilde bildirilir.)
+        log(f"Tarama eksik kaldı (bulunan en ucuz {fiyat} €), kayıt ve bildirim bu sefer atlandı.")
+        return
     g["kayitlar"].append({
         "zaman": dt.datetime.now().isoformat(timespec="minutes"),
         "fiyat": fiyat,
