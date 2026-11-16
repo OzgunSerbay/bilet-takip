@@ -1,0 +1,50 @@
+name: Fiyat takibi
+
+on:
+  schedule:
+    - cron: "0 * * * *"     # her saat başı (GitHub bazen birkaç dakika geç başlatır)
+  workflow_dispatch:         # GitHub'da "Run workflow" ile elle de çalıştırılabilir
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fiyat-takibi
+  cancel-in-progress: false
+
+jobs:
+  kontrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: Europe/Istanbul
+      NTFY_KONU: ${{ secrets.NTFY_KONU }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Kütüphaneleri kur
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Fiyatları kontrol et
+        run: python ucak_takip.py
+
+      - name: Sonuçları kaydet
+        if: always()
+        run: |
+          git config user.name "fiyat-takip-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/veri.json fiyat_gecmisi.json || true
+          if git diff --cached --quiet; then
+            echo "Değişiklik yok"
+          else
+            git commit -m "Fiyat güncellemesi $(date '+%Y-%m-%d %H:%M')"
+            git pull --rebase --autostash
+            git push
+          fi
