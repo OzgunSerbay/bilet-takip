@@ -85,7 +85,8 @@ KLASOR = Path(__file__).resolve().parent
 GECMIS_DOSYASI = KLASOR / "fiyat_gecmisi.json"
 LOG_DOSYASI = KLASOR / "takip.log"
 VERI_DOSYASI = KLASOR / "docs" / "veri.json"   # Telefon uygulamasının okuduğu dosya
-MAKS_KAYIT = 1500                               # Geçmişte tutulacak en fazla kontrol sayısı
+VALIZ_ONBELLEK = KLASOR / "valiz_onbellek.json"  # Uçuş başına son bilinen valizli paket farkı
+MAKS_KAYIT = 1500                              # Geçmişte tutulacak en fazla kontrol sayısı
 GOREV_ADI = "UcakFiyatTakip_HAJ_IST"
 AYLAR = ["", "Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
 MAKS_REZERVASYON_SAYFASI = 45   # Bir kontrolde en fazla kaç uçuşun valizli fiyatına bakılsın
@@ -277,7 +278,7 @@ def valizli_fiyat_sayfadan(sayfa, u: dict) -> tuple[int | None, str]:
                 sayfa.wait_for_timeout(3000)
                 continue
             ozet_metin = " ".join(sayfa.inner_text("body").split())[:160]
-            log(f"{u['ucus_no']} ({u['tarih']}) valizli paketler okunamadı, tahmini ücret kullanılacak | {ozet_metin}")
+            log(f"{u['ucus_no']} ({u['tarih']}) rezervasyon sayfası açılamadı | {ozet_metin[:90]}")
             return None, ""
     metin = sayfa.inner_text("body")
     bas = metin.find("Rezervasyon seçenekleri")
@@ -297,6 +298,8 @@ def valizli_fiyat_sayfadan(sayfa, u: dict) -> tuple[int | None, str]:
     # Paket yok ama uçuşun kendisi zaten valizli ise (örn. THY bazı tarifeler)
     if en_iyi is None and ("kayıtlı bagaj ücretsiz" in ust or "kayıtlı bagaj dahil" in ust):
         en_iyi, paket = u["fiyat"], "valiz dahil"
+    if en_iyi is None:
+        return None, "yok"  # sayfa açıldı ama valizli paket yok (örn. AJet) -> tahmini ücret
     return en_iyi, paket
 
 
@@ -328,6 +331,10 @@ def valizli_fiyatlari_hesapla(ucuslar: list[dict]) -> None:
 
     en_iyi = {}  # (tarih, varış şehri) -> en ucuz valizli fiyat
     bakilan = 0
+    try:  # uçuş -> son bilinen valizli paket farkı (sayfa açılamazsa kullanılır)
+        onbellek = json.loads(VALIZ_ONBELLEK.read_text(encoding="utf-8"))
+    except Exception:
+        onbellek = {}
     with sync_playwright() as p:
         tarayici = None
         for kanal in ("msedge", "chrome", None):
@@ -349,18 +356,30 @@ def valizli_fiyatlari_hesapla(ucuslar: list[dict]) -> None:
             if bakilan >= MAKS_REZERVASYON_SAYFASI:
                 break
             bakilan += 1
+            if BULUT and bakilan > 1:
+                sayfa.wait_for_timeout(1500)  # Google'ı yormamak için sayfalar arasında kısa bekleme
             try:
                 f, paket = valizli_fiyat_sayfadan(sayfa, u)
             except Exception as e:
                 log(f"{u['ucus_no']} rezervasyon sayfası okunamadı: {e!r}")
                 f, paket = None, ""
+            ob_anahtar = f"{u['tarih']}|{u['ucus_no']}"
             if f is not None:
                 u["valizli"], u["valiz_kaynak"] = f, f"Google: {paket}".strip()
+                onbellek[ob_anahtar] = {"fark": f - u["fiyat"], "paket": paket}
+            elif paket != "yok" and ob_anahtar in onbellek:
+                # Sayfa açılamadı: bu uçuşun son bilinen valizli paket farkını kullan
+                o = onbellek[ob_anahtar]
+                u["valizli"], u["valiz_kaynak"] = u["fiyat"] + o["fark"], f"Google: {o['paket']}".strip()
             else:
                 u["valizli"], u["valiz_kaynak"] = tahmini_valizli(u), "tahmini"
             if anahtar not in en_iyi or u["valizli"] < en_iyi[anahtar]:
                 en_iyi[anahtar] = u["valizli"]
         tarayici.close()
+    try:
+        VALIZ_ONBELLEK.write_text(json.dumps(onbellek, ensure_ascii=False, indent=0), encoding="utf-8")
+    except Exception as e:
+        log(f"Valiz önbelleği kaydedilemedi: {e!r}")
     tahmini_doldur(ucuslar)
 
 
