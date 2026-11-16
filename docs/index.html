@@ -9,7 +9,11 @@
 <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bilet Takip">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
   :root {
     --bg: #f3f5f9; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
@@ -261,10 +265,15 @@ const KAYIT_KONU = "bilet-takip-kayit-190dd53c21394ec6";
 state.push = "bilinmiyor"; // yok | kapali | acik | engelli | bekliyor | hata
 state.pushHata = "";
 
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const ANA_EKRANDA = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
 function pushDestek() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 async function pushDurum() {
+  // iPhone'da bildirim sadece ana ekrana eklenmiş uygulamada çalışır (iOS 16.4+)
+  if (IOS && !ANA_EKRANDA) { state.push = "ios-ekle"; return; }
   if (!pushDestek()) { state.push = "yok"; return; }
   if (Notification.permission === "denied") { state.push = "engelli"; return; }
   try {
@@ -320,10 +329,19 @@ function pushKart() {
   if (s === "acik") return `<section class="card push on"><div><b>🔔 Bildirimler açık</b>
       <div class="sub">Fiyat düşünce ve her saat başı bu telefona bildirim gelir.</div></div>
       <button class="ghost" id="push-kapat">Kapat</button></section>`;
-  if (s === "yok") return `<section class="card push"><div><b>🔕 Bu tarayıcı bildirim desteklemiyor</b>
+  if (s === "ios-ekle") return `<section class="card push"><div><b>🔔 iPhone'da bildirim almak için</b>
+      <div class="sub" style="margin-top:4px">1. Safari'de alttaki <b>Paylaş</b> tuşuna bas <svg aria-hidden="true" width="14" height="16" viewBox="0 0 14 18" style="vertical-align:-2px" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V1M3.5 4.5L7 1l3.5 3.5M4.5 7.5H2.5v9h9v-9h-2"/></svg><br>
+      2. <b>Ana Ekrana Ekle</b> → <b>Ekle</b><br>
+      3. Ana ekrandaki <b>Bilet Takip</b> ikonundan aç ve burada <b>Bildirimleri aç</b>'a bas</div></div></section>`;
+  if (s === "yok") return IOS
+    ? `<section class="card push"><div><b>🔕 Bu iPhone bildirim desteklemiyor</b>
+      <div class="sub">Bildirim için iOS 16.4 veya daha yeni sürüm gerekir. Ayarlar → Genel → Yazılım Güncelleme'den güncelleyebilirsin.</div></div></section>`
+    : `<section class="card push"><div><b>🔕 Bu tarayıcı bildirim desteklemiyor</b>
       <div class="sub">Android'de Chrome ile açıp uygulamayı ana ekrana yüklersen bildirim açabilirsin.</div></div></section>`;
   if (s === "engelli") return `<section class="card push"><div><b>🔕 Bildirim izni kapalı</b>
-      <div class="sub">Telefon Ayarları → Uygulamalar → Chrome (veya Bilet Takip) → Bildirimler kısmından izin ver, sonra bu sayfayı yenile.</div></div></section>`;
+      <div class="sub">${IOS
+        ? "iPhone Ayarlar → Bildirimler → Bilet Takip kısmından bildirimlere izin ver, sonra uygulamayı kapatıp aç."
+        : "Telefon Ayarları → Uygulamalar → Chrome (veya Bilet Takip) → Bildirimler kısmından izin ver, sonra bu sayfayı yenile."}</div></div></section>`;
   const hata = s === "hata" ? `<div class="sub" style="color:var(--warn)">Olmadı: ${esc(state.pushHata)}. İnternetini kontrol edip tekrar dene.</div>` : "";
   return `<section class="card push"><div><b>🔔 Fiyat düşünce haber alalım mı?</b>
       <div class="sub">Başka uygulama gerekmez, bildirim doğrudan buraya gelir.</div>${hata}</div>

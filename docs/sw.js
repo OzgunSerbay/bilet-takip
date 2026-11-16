@@ -1,7 +1,7 @@
 // Uygulamanın internetsizken de açılması için basit önbellek.
 // Fiyat verisi (veri.json) her zaman önce internetten alınır, olmazsa son kayıtlı veri gösterilir.
-const CACHE = "bilet-takip-v3";
-const SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
+const CACHE = "bilet-takip-v4";
+const SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
