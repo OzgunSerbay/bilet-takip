@@ -30,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -192,15 +193,22 @@ def saat(t) -> str:
 def grup_ara(tarih: str, kalkislar: list[str], varislar: list[str]) -> tuple[list[dict], bool]:
     """Bir havalimanı grubunu arar; Google hata verirse grubu ikiye bölüp tekrar dener.
     (uçuşlar, eksik_mi) döndürür."""
-    try:
-        sonuc = ucuslari_getir(tarih, kalkislar, varislar)
-    except Exception as e:
-        log(f"{tarih} {','.join(kalkislar)} için fiyat alınamadı: {e!r}")
-        sonuc = None
-    if sonuc is not None:
-        return sonuc, False
+    global _istemci
+    deneme_sayisi = 1 if len(kalkislar) > 1 else 4
+    sonuc = None
+    for deneme in range(deneme_sayisi):
+        if deneme:
+            time.sleep(3 * deneme)
+            _istemci = None  # yeni oturumla dene
+        try:
+            sonuc = ucuslari_getir(tarih, kalkislar, varislar)
+        except Exception as e:
+            log(f"{tarih} {','.join(kalkislar)} için fiyat alınamadı: {e!r}")
+            sonuc = None
+        if sonuc is not None:
+            return sonuc, False
     if len(kalkislar) == 1:
-        log(f"{tarih} {kalkislar[0]} için Google hata verdi, bu kontrolde atlandı")
+        log(f"{tarih} {kalkislar[0]} için Google {deneme_sayisi} denemede de hata verdi, bu kontrolde atlandı")
         return [], True
     yari = len(kalkislar) // 2
     a, eksik_a = grup_ara(tarih, kalkislar[:yari], varislar)
