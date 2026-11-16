@@ -194,9 +194,10 @@ def ucuslari_getir(tarih: str, kalkislar: list[str], varislar: list[str]) -> lis
                       params={"tfs": arama_tfs(tarih, kalkislar, varislar), "hl": "tr", "gl": ULKE, "curr": PARA_BIRIMI})
     script = LexborHTMLParser(r.text).css_first(r"script.ds\:1")
     if script is None:
-        raise RuntimeError("Google sayfasında uçuş verisi yok")
+        raise RuntimeError(f"Google sayfasında uçuş verisi yok (HTTP {r.status_code}, {str(r.url)[:80]})")
     veri = script.text().split("data:", 1)[1].rsplit(",", 1)[0]
     if veri.endswith("errorHasStatus: true"):
+        log(f"[tanı] {tarih} {','.join(kalkislar)}: Google hata döndü")
         return []
     payload = json.loads(veri)
     tekil = {}
@@ -244,6 +245,9 @@ def valizli_fiyat_sayfadan(sayfa, u: dict) -> tuple[int | None, str]:
     try:
         sayfa.wait_for_selector("text=Rezervasyon seçenekleri", timeout=15000)
     except Exception:
+        if BULUT:
+            ozet_metin = " ".join(sayfa.inner_text("body").split())[:400]
+            log(f"[tanı] {u['ucus_no']} rezervasyon sayfası beklenmedik: {sayfa.url[:120]} | {ozet_metin}")
         return None, ""
     metin = sayfa.inner_text("body")
     bas = metin.find("Rezervasyon seçenekleri")
@@ -447,7 +451,10 @@ def kontrol() -> None:
     for t in gunler:
         for grup in gruplar:
             try:
-                ucuslar += ucuslari_getir(t, grup, list(VARIS))
+                yeni = ucuslari_getir(t, grup, list(VARIS))
+                if BULUT:
+                    log(f"[tanı] {t} {','.join(grup)}: {len(yeni)} uçuş")
+                ucuslar += yeni
             except Exception as e:
                 log(f"{t} {','.join(grup)} için fiyat alınamadı: {e!r}")
     if not ucuslar:
