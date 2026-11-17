@@ -92,6 +92,22 @@
   .btn-primary[disabled] { opacity: .6; }
   .ghost { background: transparent; color: var(--muted); padding: 8px 10px; border: 1px solid var(--line); font-size: 13px; }
   .skeleton { color: var(--muted); text-align: center; padding: 60px 0; }
+  .durum { display: flex; gap: 12px; align-items: center; }
+  .durum > div { flex: 1; }
+  .durum .dn { font-size: 22px; display: inline-block; animation: spin 1.2s linear infinite; color: var(--accent); }
+  .durum.ok { background: var(--good-soft); color: var(--good); }
+  .durum.hata .sub { color: var(--warn); }
+  .bar { height: 6px; background: var(--chip); border-radius: 99px; margin-top: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .6s; }
+  .topic input { flex: 1; min-width: 0; font: inherit; font-size: 16px; background: var(--chip); color: var(--text);
+    border: 0; border-radius: 10px; padding: 9px 10px; }
+  details.adim { margin-top: 8px; font-size: 13.5px; }
+  details.adim summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  details.adim ol { padding-left: 20px; margin: 6px 0; }
+  details.adim li { margin: 4px 0; }
+  .card a { color: var(--accent); }
+  .card a.btn-primary { color: #fff; }
+  .card a.flight { color: inherit; }
 </style>
 </head>
 <body>
@@ -103,6 +119,8 @@
     </div>
     <button class="icon-btn" id="refresh" aria-label="Yenile"><span>↻</span></button>
   </header>
+  <div id="arama"></div>
+  <div id="anahtar"></div>
   <div id="app"><div class="skeleton">Fiyatlar yükleniyor…</div></div>
 </main>
 
@@ -160,7 +178,7 @@ function render() {
   const gosterilen = state.showAll ? list : list.slice(0, 8);
 
   $("#app").innerHTML = `
-    ${yasli ? `<div class="banner">⚠️ Son kontrol ${once(d.guncelleme)} yapıldı. GitHub'daki otomatik kontrol gecikmiş olabilir.</div>` : ""}
+    ${yasli && !["baslatiliyor", "calisiyor"].includes(state.arama.durum) ? `<div class="banner">⚠️ Son kontrol ${once(d.guncelleme)} yapıldı. GitHub'daki otomatik kontrol gecikmiş olabilir.${anahtar.al() ? " ↻ tuşuyla yeni arama başlatabilirsin." : " Yukarıdan anahtar eklersen uygulama yenileyince kendisi arar."}</div>` : ""}
 
     <div class="tabs" role="tablist">
       ${cities.map(c => `<button class="${c === state.city ? "on" : ""}" data-city="${esc(c)}">${esc(c)}</button>`).join("")}
@@ -213,6 +231,7 @@ function render() {
 
     <section class="card note">
       <h2>ℹ️ Bilgi</h2>
+      ${anahtar.al() ? `<div class="topic" style="margin-bottom:10px"><span style="flex:1">🔄 Yenileyince arama açık: uygulamayı açınca son aramadan ${TAZE_DK} dk geçtiyse, ↻ tuşunda her zaman yeni arama başlar.</span><button class="ghost" id="anahtar-sil">Anahtarı sil</button></div>` : ""}
       <p>İstersen bildirimleri <b>ntfy</b> uygulamasıyla da alabilirsin; ntfy'da şu konuya abone ol:</p>
       <div class="topic"><code id="topic">${esc(d.ntfy)}</code><button id="copy">Kopyala</button></div>
       <p style="margin-top:12px">Fiyatlar Google Uçuşlar'dan, 1 yetişkin, tek yön, sadece direkt uçuşlar. Tren bileti fiyata dahil değil; tren süreleri yaklaşık. "Kesin" fiyatlar havayolunun valizli paketinden gelir; diğerlerinde bilete tahmini valiz ücreti eklenmiştir.</p>
@@ -224,6 +243,11 @@ function render() {
   const more = $("#more"); if (more) more.onclick = () => { state.showAll = !state.showAll; render(); };
   const pac = $("#push-ac"); if (pac) pac.onclick = bildirimAc;
   const pkap = $("#push-kapat"); if (pkap) pkap.onclick = bildirimKapat;
+  const asil = $("#anahtar-sil");
+  if (asil) asil.onclick = () => {
+    if (!confirm("GitHub anahtarı bu telefondan silinsin mi? Yenileyince arama kapanır.")) return;
+    anahtar.koy(""); state.arama = { durum: "yok" }; aramaCiz(); anahtarCiz(); render();
+  };
   const copy = $("#copy");
   if (copy) copy.onclick = async () => {
     try { await navigator.clipboard.writeText(d.ntfy); copy.textContent = "Kopyalandı ✓"; }
@@ -348,25 +372,196 @@ function pushKart() {
       <button class="btn-primary small" id="push-ac" ${s === "bekliyor" ? "disabled" : ""}>${s === "bekliyor" ? "Açılıyor…" : "Bildirimleri aç"}</button></section>`;
 }
 
-async function load() {
+// ---------- Yenileyince arama: GitHub'daki kontrolü uygulamadan başlat ----------
+// GitHub'ın saatlik zamanlayıcısı bazen hiç çalışmıyor. Telefona bir kez GitHub anahtarı
+// girilirse uygulama açılınca / yenilenince aramayı kendisi başlatır, bitince fiyatları getirir.
+const GH_API = "https://api.github.com/repos/OzgunSerbay/bilet-takip";
+const GH_IS = "takip.yml";
+const TAZE_DK = 10;      // otomatik açılışta: son aramadan bu kadar dk geçmediyse yeniden arama
+const ORT_SURE_DK = 6;   // bir arama genelde 5–7 dk sürüyor (ilerleme çubuğu için)
+const ANAHTAR_LINK = "https://github.com/settings/personal-access-tokens/new"
+  + "?name=Bilet+Takip+uygulama&description=Uygulamadan+fiyat+aramas%C4%B1+ba%C5%9Flatmak+i%C3%A7in"
+  + "&expires_in=90&actions=write&contents=read";
+const AKTIF = ["queued", "in_progress", "waiting", "requested", "pending"];
+state.arama = { durum: "yok" }; // yok | baslatiliyor | calisiyor | bitti | hata
+let izleniyor = false;
+
+const anahtar = {
+  al() { try { return localStorage.getItem("gh_anahtar") || ""; } catch { return ""; } },
+  koy(v) { try { v ? localStorage.setItem("gh_anahtar", v) : localStorage.removeItem("gh_anahtar"); } catch {} },
+};
+const bekle = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function gh(yol, ayar = {}) {
+  let r;
+  try {
+    r = await fetch(GH_API + yol, {
+      ...ayar, cache: "no-store",
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${anahtar.al()}`, ...(ayar.headers || {}) },
+    });
+  } catch { const e = new Error("GitHub'a ulaşılamadı, internetini kontrol et"); e.kod = 0; throw e; }
+  if (r.ok) return r;
+  const e = new Error(
+    r.status === 401 ? "GitHub anahtarı geçersiz ya da süresi dolmuş, yeniden eklemen lazım" :
+    r.status === 403 || r.status === 404 ? "Anahtarın bilet-takip reposunda Actions yazma izni yok" :
+    `GitHub hata verdi (${r.status})`);
+  e.kod = r.status;
+  throw e;
+}
+async function sonCalismalar(ek = "") {
+  const r = await gh(`/actions/workflows/${GH_IS}/runs?per_page=5${ek}`);
+  return (await r.json()).workflow_runs || [];
+}
+
+async function aramaKontrol(zorla) {
+  if (!anahtar.al() || izleniyor || !state.data) return;
+  izleniyor = true;
+  try {
+    // Zaten çalışan (saatlik ya da önceki) bir arama varsa yenisini başlatma, onu takip et
+    let run = (await sonCalismalar()).find(x => AKTIF.includes(x.status));
+    if (!run) {
+      const yasDk = (Date.now() - new Date(state.data.guncelleme).getTime()) / 60000;
+      if (!zorla && yasDk < TAZE_DK) return;
+      run = await aramaBaslat();
+    }
+    await izle(run);
+  } catch (e) {
+    if (e.kod === 401) { anahtar.koy(""); anahtarCiz(); }
+    state.arama = { durum: "hata", mesaj: e.message || String(e) };
+    aramaCiz(); render();
+  } finally {
+    izleniyor = false;
+  }
+}
+
+async function aramaBaslat() {
+  state.arama = { durum: "baslatiliyor" }; aramaCiz(); render();
+  const onceki = await sonCalismalar("&event=workflow_dispatch");
+  const eskiId = onceki.length ? onceki[0].id : 0;
+  await gh(`/actions/workflows/${GH_IS}/dispatches`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main" }),
+  });
+  for (let i = 0; i < 20; i++) {
+    await bekle(3000);
+    const yeni = (await sonCalismalar("&event=workflow_dispatch")).find(x => x.id > eskiId);
+    if (yeni) return yeni;
+  }
+  throw new Error("Arama başlatıldı ama GitHub'da görünmedi, biraz sonra ↻ ile tekrar dene");
+}
+
+async function izle(run) {
+  state.arama = { durum: "calisiyor", bas: new Date(run.run_started_at || run.created_at).getTime(), url: run.html_url };
+  aramaCiz(); render();
+  for (;;) {
+    await bekle(10000);
+    const r = await (await gh(`/actions/runs/${run.id}`)).json();
+    if (r.run_started_at) state.arama.bas = new Date(r.run_started_at).getTime();
+    if (r.status === "completed") {
+      if (r.conclusion !== "success") throw new Error(`Arama yarıda kaldı (${r.conclusion}). ↻ ile tekrar deneyebilirsin`);
+      await tazeVeri();
+      state.arama = { durum: "bitti" }; aramaCiz();
+      setTimeout(() => { if (state.arama.durum === "bitti") { state.arama = { durum: "yok" }; aramaCiz(); } }, 6000);
+      return;
+    }
+    aramaCiz();
+  }
+}
+
+// Arama biter bitmez veriyi doğrudan repodan al (GitHub Pages'in güncellenmesi ~1 dk sürüyor)
+async function tazeVeri() {
+  try {
+    const r = await gh("/contents/docs/veri.json?ref=main", { headers: { Accept: "application/vnd.github.raw+json" } });
+    veriKoy(await r.json());
+  } catch {
+    await veriGetir().catch(() => {});
+  }
+}
+
+function aramaCiz() {
+  const el = $("#arama"), a = state.arama;
+  if (a.durum === "baslatiliyor") {
+    el.innerHTML = `<section class="card durum"><span class="dn">↻</span><div><b>Yeni arama başlatılıyor…</b></div></section>`;
+  } else if (a.durum === "calisiyor") {
+    const gecen = Math.max(0, Date.now() - a.bas);
+    const dk = Math.floor(gecen / 60000);
+    const yuzde = Math.min(95, Math.round(gecen / (ORT_SURE_DK * 600)));
+    el.innerHTML = `<section class="card durum"><span class="dn">↻</span><div><b>Yeni fiyatlar aranıyor</b>
+      <div class="sub">${dk ? dk + " dk geçti · " : ""}genelde 5–7 dk sürer, bitince sayfa kendiliğinden güncellenir</div>
+      <div class="bar"><i style="width:${yuzde}%"></i></div></div></section>`;
+  } else if (a.durum === "bitti") {
+    el.innerHTML = `<section class="card durum ok"><div><b>✓ Arama bitti, fiyatlar güncel</b></div></section>`;
+  } else if (a.durum === "hata") {
+    el.innerHTML = `<section class="card durum hata"><div><b>Arama yapılamadı</b><div class="sub">${esc(a.mesaj)}</div></div>
+      ${anahtar.al() ? `<button class="ghost" id="arama-tekrar">Tekrar dene</button>` : ""}</section>`;
+    const t = $("#arama-tekrar"); if (t) t.onclick = () => aramaKontrol(true);
+  } else {
+    el.innerHTML = "";
+  }
+}
+
+function anahtarCiz(hata = "") {
+  const el = $("#anahtar");
+  if (anahtar.al()) { el.innerHTML = ""; return; }
+  el.innerHTML = `<section class="card">
+    <b>🔄 Yenileyince yeni arama yapsın</b>
+    <div class="sub" style="margin-top:4px">GitHub'ın saatlik kontrolü bazen atlanıyor. Bir kere GitHub anahtarı eklersen uygulamayı açınca ya da ↻ tuşuna basınca arama kendisi başlar, bitince fiyatlar güncellenir. Anahtar sadece bu telefonda saklanır.</div>
+    <details class="adim"><summary>Anahtar nasıl alınır? (1 dk)</summary><ol>
+      <li><a href="${ANAHTAR_LINK}" target="_blank" rel="noopener">Bu bağlantıyı aç</a> ve GitHub'a giriş yap.</li>
+      <li><b>Repository access</b> kısmında <b>Only select repositories</b> seç, listeden <b>bilet-takip</b>'i işaretle.</li>
+      <li>İzinler hazır gelir (<b>Actions: Read and write</b>). En alttaki <b>Generate token</b>'a bas, çıkan <code>github_pat_…</code> anahtarını kopyala.</li>
+      <li>Aşağıya yapıştırıp <b>Kaydet</b>'e bas.</li></ol></details>
+    <div class="topic"><input id="anahtar-gir" type="password" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"><button id="anahtar-kaydet">Kaydet</button></div>
+    ${hata ? `<div class="sub" style="color:var(--warn);margin-top:6px">${esc(hata)}</div>` : ""}
+  </section>`;
+  $("#anahtar-kaydet").onclick = anahtarKaydet;
+}
+async function anahtarKaydet() {
+  const v = $("#anahtar-gir").value.trim();
+  if (!v) return;
+  const b = $("#anahtar-kaydet");
+  b.disabled = true; b.textContent = "Bakılıyor…";
+  anahtar.koy(v);
+  try {
+    await gh(`/actions/workflows/${GH_IS}`);
+  } catch (e) {
+    anahtar.koy("");
+    anahtarCiz(e.kod === 401 ? "Anahtar geçersiz görünüyor, tekrar kopyalayıp dene." : e.message);
+    return;
+  }
+  anahtarCiz(); render();
+  aramaKontrol(false);
+}
+
+// ---------- Veri yükleme ----------
+function veriKoy(v) {
+  // GitHub Pages bazen bir dakika eski veriyi verir; daha yenisi elimizdeyse ezme
+  if (state.data && new Date(v.guncelleme) < new Date(state.data.guncelleme)) return;
+  state.data = v;
+  render();
+}
+async function veriGetir() {
+  const r = await fetch(`veri.json?t=${Date.now()}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(r.status);
+  veriKoy(await r.json());
+}
+async function load(zorla = false) {
   const btn = $("#refresh");
   btn.classList.add("spin");
   try {
-    const r = await fetch(`veri.json?t=${Date.now()}`, { cache: "no-store" });
-    if (!r.ok) throw new Error(r.status);
-    state.data = await r.json();
-    render();
+    await veriGetir();
   } catch (e) {
     if (!state.data) $("#app").innerHTML = `<div class="card empty">Veri yüklenemedi. İnternet bağlantını kontrol edip ↻ tuşuna bas.</div>`;
   } finally {
     btn.classList.remove("spin");
   }
+  aramaKontrol(zorla);
 }
 
-$("#refresh").onclick = load;
-document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+$("#refresh").onclick = () => load(true);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(false); });
 setInterval(() => state.data && render(), 60000);
-load();
+anahtarCiz();
+load(false);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 pushDurum().then(() => state.data && render());
 </script>
