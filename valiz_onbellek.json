@@ -8,7 +8,7 @@
 "paket": "Saver"
 },
 "2026-12-23|PC7214": {
-"fark": 35,
+"fark": 33,
 "paket": "Saver"
 },
 "2026-12-23|PC984": {
@@ -88,7 +88,7 @@
 "paket": "Saver"
 },
 "2026-12-19|PC978": {
-"fark": 35,
+"fark": 40,
 "paket": "Saver"
 },
 "2026-12-19|PC1008": {
@@ -162,5 +162,29 @@
 "2026-12-20|XQ1371": {
 "fark": 0,
 "paket": "valiz dahil"
+},
+"2026-12-19|PC1032": {
+"fark": 40,
+"paket": "Saver"
+},
+"2026-12-19|PC1012": {
+"fark": 40,
+"paket": "Saver"
+},
+"2026-12-19|PC1018": {
+"fark": 40,
+"paket": "Saver"
+},
+"2026-12-19|PC1052": {
+"fark": 35,
+"paket": "Saver"
+},
+"2026-12-19|PC998": {
+"fark": 40,
+"paket": "Saver"
+},
+"2026-12-19|PC1004": {
+"fark": 40,
+"paket": "Saver"
 }
 }
