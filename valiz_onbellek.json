@@ -16,7 +16,7 @@
 "paket": "Saver"
 },
 "2026-12-21|PC982": {
-"fark": 35,
+"fark": 19,
 "paket": "Saver"
 },
 "2026-12-21|PC978": {
@@ -188,6 +188,14 @@
 "paket": "Saver"
 },
 "2026-12-23|PC986": {
+"fark": 35,
+"paket": "Saver"
+},
+"2026-12-20|PC1034": {
+"fark": 35,
+"paket": "Saver"
+},
+"2026-12-21|PC1036": {
 "fark": 35,
 "paket": "Saver"
 }
