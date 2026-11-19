@@ -1,7 +1,7 @@
 {
   "surum": 3,
   "en_dusuk": 119,
-  "son": 156,
+  "son": 151,
   "kayitlar": [
     {
       "zaman": "2026-11-16T19:53",
@@ -308,6 +308,26 @@
       },
       "sehir_fiyat": {
         "İstanbul": 156,
+        "Adana": 156
+      }
+    },
+    {
+      "zaman": "2026-11-19T14:35",
+      "fiyat": 151,
+      "ucus": "21 Ara · Pegasus · Düsseldorf (DUS) → İstanbul (SAW) · 12:40-17:55 · 🚆 Hannover'dan ~2 sa 30 dk · Saver paketi (valizsiz 165 €)",
+      "gunler": {
+        "19 Ara": 176,
+        "20 Ara": 171,
+        "21 Ara": 151,
+        "22 Ara": 156,
+        "23 Ara": 170
+      },
+      "sehirler": {
+        "İstanbul": "151 € 21 Ara Düsseldorf→SAW Pegasus 12:40",
+        "Adana": "156 € 22 Ara Berlin→COV Pegasus 21:00"
+      },
+      "sehir_fiyat": {
+        "İstanbul": 151,
         "Adana": 156
       }
     }
