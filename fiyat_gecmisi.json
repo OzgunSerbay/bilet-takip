@@ -1,7 +1,7 @@
 {
   "surum": 3,
   "en_dusuk": 119,
-  "son": 170,
+  "son": 176,
   "kayitlar": [
     {
       "zaman": "2026-11-16T19:53",
@@ -489,6 +489,26 @@
       "sehir_fiyat": {
         "Adana": 170,
         "İstanbul": 176
+      }
+    },
+    {
+      "zaman": "2026-11-22T21:27",
+      "fiyat": 176,
+      "ucus": "21 Ara · AJet · Köln (CGN) → İstanbul (SAW) · 00:15-05:30 · 🚆 Hannover'dan ~2 sa 45 dk · tahmini valiz ücretiyle (valizsiz 146 €)",
+      "gunler": {
+        "19 Ara": 184,
+        "20 Ara": 194,
+        "21 Ara": 176,
+        "22 Ara": 195,
+        "23 Ara": 190
+      },
+      "sehirler": {
+        "İstanbul": "176 € 21 Ara Köln→SAW AJet 00:15",
+        "Adana": "190 € 23 Ara Berlin→COV SunExpress 07:30"
+      },
+      "sehir_fiyat": {
+        "İstanbul": 176,
+        "Adana": 190
       }
     }
   ]
