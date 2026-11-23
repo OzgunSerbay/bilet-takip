@@ -48,6 +48,9 @@ def _yukle() -> dict:
 
 
 def _kaydet(depo: dict) -> None:
+    # Şifreleme her seferinde farklı çıktı verir; içerik aynıysa dosyaya dokunma (git çakışmalarını önler)
+    if DEPO.exists() and _yukle() == depo:
+        return
     DEPO.write_bytes(_fernet().encrypt(json.dumps(depo).encode()))
 
 
