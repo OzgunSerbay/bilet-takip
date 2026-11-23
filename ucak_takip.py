@@ -86,6 +86,9 @@ GECMIS_DOSYASI = KLASOR / "fiyat_gecmisi.json"
 LOG_DOSYASI = KLASOR / "takip.log"
 VERI_DOSYASI = KLASOR / "docs" / "veri.json"   # Telefon uygulamasının okuduğu dosya
 VALIZ_ONBELLEK = KLASOR / "valiz_onbellek.json"  # Uçuş başına son bilinen valizli paket farkı
+SON_TARAMA = KLASOR / "son_tarama.json"          # Her gün+şehir için son başarılı arama (Google reddederse kullanılır)
+ESKI_TARAMA_MAKS_SAAT = 12                       # Bundan eski tarama yedeği kullanılmaz
+ARAMA_ARASI_SN = 2.0                             # Bulutta Google aramaları arasındaki en az bekleme
 MAKS_KAYIT = 1500                              # Geçmişte tutulacak en fazla kontrol sayısı
 GOREV_ADI = "UcakFiyatTakip_HAJ_IST"
 AYLAR = ["", "Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
@@ -191,30 +194,57 @@ def saat(t) -> str:
     return f"{t[0] or 0:02d}:{t[1] or 0:02d}"
 
 
-def grup_ara(tarih: str, kalkislar: list[str], varislar: list[str]) -> tuple[list[dict], bool]:
+_son_istek = 0.0
+
+
+def _bekle_sira() -> None:
+    """Buluttan art arda istek atınca Google reddediyor: istekler arasına kısa bekleme koy."""
+    global _son_istek
+    if BULUT:
+        kalan = ARAMA_ARASI_SN - (time.time() - _son_istek)
+        if kalan > 0:
+            time.sleep(kalan)
+    _son_istek = time.time()
+
+
+def grup_ara(tarih: str, kalkislar: list[str], varislar: list[str]) -> tuple[list[dict], list[str]]:
     """Bir havalimanı grubunu arar; Google hata verirse grubu ikiye bölüp tekrar dener.
-    (uçuşlar, eksik_mi) döndürür."""
+    (uçuşlar, taranamayan_havalimanları) döndürür."""
     global _istemci
     deneme_sayisi = 1 if len(kalkislar) > 1 else 4
     sonuc = None
     for deneme in range(deneme_sayisi):
         if deneme:
-            time.sleep(3 * deneme)
+            time.sleep(4 * deneme)
             _istemci = None  # yeni oturumla dene
+        _bekle_sira()
         try:
             sonuc = ucuslari_getir(tarih, kalkislar, varislar)
         except Exception as e:
             log(f"{tarih} {','.join(kalkislar)} için fiyat alınamadı: {e!r}")
             sonuc = None
         if sonuc is not None:
-            return sonuc, False
+            return sonuc, []
     if len(kalkislar) == 1:
-        log(f"{tarih} {kalkislar[0]} için Google {deneme_sayisi} denemede de hata verdi, bu kontrolde atlandı")
-        return [], True
+        return [], [kalkislar[0]]
     yari = len(kalkislar) // 2
-    a, eksik_a = grup_ara(tarih, kalkislar[:yari], varislar)
-    b, eksik_b = grup_ara(tarih, kalkislar[yari:], varislar)
-    return a + b, eksik_a or eksik_b
+    a, olmayan_a = grup_ara(tarih, kalkislar[:yari], varislar)
+    b, olmayan_b = grup_ara(tarih, kalkislar[yari:], varislar)
+    return a + b, olmayan_a + olmayan_b
+
+
+def son_tarama_oku() -> dict:
+    try:
+        return json.loads(SON_TARAMA.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def son_tarama_yaz(tarama: dict) -> None:
+    try:
+        SON_TARAMA.write_text(json.dumps(tarama, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    except Exception as e:
+        log(f"Son tarama kaydedilemedi: {e!r}")
 
 
 def ucuslari_getir(tarih: str, kalkislar: list[str], varislar: list[str]) -> list[dict] | None:
@@ -508,11 +538,32 @@ def kontrol() -> None:
     gruplar = [kodlar[i:i + GRUP_BOYUTU] for i in range(0, len(kodlar), GRUP_BOYUTU)]
     ucuslar = []
     eksik = False
+    onceki_tarama = son_tarama_oku()   # "tarih|kalkış" -> {"zaman": ..., "ucuslar": [...]}
+    yeni_tarama = {}
+    simdi = dt.datetime.now().astimezone()
     for t in gunler:
         for grup in gruplar:
-            yeni, grup_eksik = grup_ara(t, grup, list(VARIS))
-            eksik = eksik or grup_eksik
+            yeni, olmayanlar = grup_ara(t, grup, list(VARIS))
             ucuslar += yeni
+            for kod in grup:
+                if kod not in olmayanlar:
+                    yeni_tarama[f"{t}|{kod}"] = {"zaman": simdi.isoformat(timespec="minutes"),
+                                                 "ucuslar": [u for u in yeni if u["nereden"] == kod]}
+            for kod in olmayanlar:
+                anahtar = f"{t}|{kod}"
+                eski = onceki_tarama.get(anahtar)
+                yas_saat = None
+                if eski:
+                    yas_saat = (simdi - dt.datetime.fromisoformat(eski["zaman"])).total_seconds() / 3600
+                if eski and yas_saat <= ESKI_TARAMA_MAKS_SAAT:
+                    # Google bu şehri reddetti: son başarılı taramadaki uçuşlarını kullan
+                    ucuslar += [dict(u, bacaklar=[tuple(b) for b in u["bacaklar"]]) for u in eski["ucuslar"]]
+                    yeni_tarama[anahtar] = eski
+                    log(f"{t} {kod}: Google reddetti, {yas_saat:.1f} saat önceki tarama kullanıldı")
+                else:
+                    eksik = True
+                    log(f"{t} {kod}: Google reddetti ve yakın zamanda taranmış verisi yok, bu kontrolde atlandı")
+    son_tarama_yaz(yeni_tarama)
     if not ucuslar:
         log("Hiç uçuş/fiyat bulunamadı (Google cevap vermemiş olabilir), sonraki kontrolde tekrar denenecek.")
         return

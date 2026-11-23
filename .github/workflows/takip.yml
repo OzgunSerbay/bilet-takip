@@ -2,8 +2,10 @@ name: Fiyat takibi
 
 on:
   schedule:
-    - cron: "5 * * * *"     # her saat xx:05 (tam saat başı GitHub'da çok yoğun, çalıştırma atlanabiliyor)
-  workflow_dispatch:         # GitHub'da "Run workflow" ile elle de çalıştırılabilir
+    # GitHub zamanlanmış çalıştırmaların çoğunu atlıyor (saatlik ayarda günde 3-4 kez çalıştı).
+    # Bu yüzden 10 dakikada bir tetikleniyor; son kontrol 50 dakikadan yeniyse hemen bitiyor.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:         # Uygulamadaki ↻ tuşu ya da GitHub'da "Run workflow" (her zaman çalışır)
 
 permissions:
   contents: write
@@ -23,21 +25,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Kontrol zamanı geldi mi?
+        id: zaman
+        env:
+          OLAY: ${{ github.event_name }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, datetime as dt
+          atla = False
+          if os.environ["OLAY"] == "schedule":
+              try:
+                  son = dt.datetime.fromisoformat(json.load(open("docs/veri.json", encoding="utf-8"))["guncelleme"])
+                  gecen = (dt.datetime.now(dt.timezone.utc) - son).total_seconds() / 60
+                  print(f"Son başarılı kontrol {gecen:.0f} dk önce")
+                  atla = gecen < 50
+              except Exception as e:
+                  print("Son kontrol zamanı okunamadı:", e)
+          print("Atlanıyor" if atla else "Kontrol yapılacak")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"atla={'true' if atla else 'false'}\n")
+          EOF
+
       - uses: actions/setup-python@v5
+        if: steps.zaman.outputs.atla != 'true'
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Kütüphaneleri kur
+        if: steps.zaman.outputs.atla != 'true'
         run: |
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
+      - name: Son taramayı geri yükle
+        if: steps.zaman.outputs.atla != 'true'
+        uses: actions/cache@v4
+        with:
+          path: son_tarama.json
+          key: son-tarama-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: son-tarama-
+
       - name: Fiyatları kontrol et
+        if: steps.zaman.outputs.atla != 'true'
         run: python ucak_takip.py
 
       - name: Sonuçları kaydet
-        if: always()
+        if: always() && steps.zaman.outputs.atla != 'true'
         run: |
           git config user.name "fiyat-takip-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
