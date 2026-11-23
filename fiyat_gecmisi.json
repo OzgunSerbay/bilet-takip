@@ -570,6 +570,26 @@
         "İstanbul": 171,
         "Adana": 190
       }
+    },
+    {
+      "zaman": "2026-11-23T19:24",
+      "fiyat": 171,
+      "ucus": "23 Ara · Pegasus · Berlin (BER) → İstanbul (SAW) · 15:55-20:50 · 🚆 Hannover'dan ~1 sa 40 dk · Saver paketi (valizsiz 136 €)",
+      "gunler": {
+        "19 Ara": 195,
+        "20 Ara": 195,
+        "21 Ara": 183,
+        "22 Ara": 195,
+        "23 Ara": 171
+      },
+      "sehirler": {
+        "İstanbul": "171 € 23 Ara Berlin→SAW Pegasus 15:55",
+        "Adana": "190 € 23 Ara Berlin→COV SunExpress 07:30"
+      },
+      "sehir_fiyat": {
+        "İstanbul": 171,
+        "Adana": 190
+      }
     }
   ]
 }
