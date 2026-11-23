@@ -1,23 +1,28 @@
 name: Fiyat takibi
 
 on:
+  # Asıl saatlik düzen: her çalıştırmanın sonundaki "zincir" işi bir sonraki saat başını bekleyip
+  # bu iş akışını kendisi yeniden başlatır. GitHub'ın kendi zamanlayıcısı güvenilmez (günde 3-4 kez
+  # çalışıyor); sadece zincir koparsa yeniden başlatmak için yedek olarak duruyor.
   schedule:
-    # GitHub zamanlanmış çalıştırmaların çoğunu atlıyor (saatlik ayarda günde 3-4 kez çalıştı).
-    # Bu yüzden 10 dakikada bir tetikleniyor; son kontrol 50 dakikadan yeniyse hemen bitiyor.
-    - cron: "*/10 * * * *"
+    - cron: "20 * * * *"
   workflow_dispatch:         # Uygulamadaki ↻ tuşu ya da GitHub'da "Run workflow" (her zaman çalışır)
+    inputs:
+      otomatik:
+        description: "Zincirin başlattığı saatlik kontrol (yakın zamanda kontrol yapıldıysa atlar)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
-
-concurrency:
-  group: fiyat-takibi
-  cancel-in-progress: false
 
 jobs:
   kontrol:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    concurrency:
+      group: fiyat-takibi
+      cancel-in-progress: false
     env:
       TZ: Europe/Istanbul
       NTFY_KONU: ${{ secrets.NTFY_KONU }}
@@ -31,16 +36,17 @@ jobs:
         id: zaman
         env:
           OLAY: ${{ github.event_name }}
+          OTOMATIK: ${{ inputs.otomatik }}
         run: |
           python3 - <<'EOF'
           import json, os, datetime as dt
           atla = False
-          if os.environ["OLAY"] == "schedule":
+          if os.environ["OLAY"] == "schedule" or os.environ.get("OTOMATIK") == "true":
               try:
                   son = dt.datetime.fromisoformat(json.load(open("docs/veri.json", encoding="utf-8"))["guncelleme"])
                   gecen = (dt.datetime.now(dt.timezone.utc) - son).total_seconds() / 60
                   print(f"Son başarılı kontrol {gecen:.0f} dk önce")
-                  atla = gecen < 50
+                  atla = gecen < 30
               except Exception as e:
                   print("Son kontrol zamanı okunamadı:", e)
           print("Atlanıyor" if atla else "Kontrol yapılacak")
@@ -94,3 +100,30 @@ jobs:
             git pull --rebase -X theirs --autostash || { git rebase --abort; git pull --no-rebase -X ours --no-edit; }
             git push
           fi
+
+  zincir:
+    # Bir sonraki saat başına kadar bekler, sonra yeni kontrolü başlatır.
+    # Yeni bir çalıştırma (↻ tuşu vb.) gelince eski bekleyen iptal olur; zincirde hep tek halka kalır.
+    needs: kontrol
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      actions: write
+    concurrency:
+      group: zincir
+      cancel-in-progress: true
+    steps:
+      - name: Saat başını bekle ve sonraki kontrolü başlat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(TZ=Europe/Istanbul date +%Y%m%d)" -gt 20261223 ]; then
+            echo "Uçuş tarihleri geçti, zincir durduruldu."
+            exit 0
+          fi
+          simdi=$(date +%s)
+          hedef=$(( (simdi / 3600 + 1) * 3600 ))
+          echo "Sonraki kontrol: $(TZ=Europe/Istanbul date -d @$hedef '+%H:%M') ($(( (hedef - simdi) / 60 )) dk sonra)"
+          sleep $(( hedef - simdi ))
+          gh workflow run takip.yml --repo "$GITHUB_REPOSITORY" --ref main -f otomatik=true
