@@ -1,7 +1,7 @@
 {
   "surum": 3,
   "en_dusuk": 119,
-  "son": 194,
+  "son": 172,
   "kayitlar": [
     {
       "zaman": "2026-11-16T19:53",
@@ -1509,6 +1509,26 @@
       "sehir_fiyat": {
         "İstanbul": 194,
         "Adana": 210
+      }
+    },
+    {
+      "zaman": "2026-11-25T20:10",
+      "fiyat": 172,
+      "ucus": "19 Ara · Pegasus · Köln (CGN) → Adana (COV) · 20:25-02:15 · 🚆 Hannover'dan ~2 sa 45 dk · Saver paketi (valizsiz 137 €)",
+      "gunler": {
+        "19 Ara": 172,
+        "20 Ara": 194,
+        "21 Ara": 195,
+        "22 Ara": 204,
+        "23 Ara": 194
+      },
+      "sehirler": {
+        "Adana": "172 € 19 Ara Köln→COV Pegasus 20:25",
+        "İstanbul": "194 € 20 Ara Berlin→SAW AJet 17:05"
+      },
+      "sehir_fiyat": {
+        "Adana": 172,
+        "İstanbul": 194
       }
     }
   ]
