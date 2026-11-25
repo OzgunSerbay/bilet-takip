@@ -1,7 +1,7 @@
 {
   "surum": 3,
   "en_dusuk": 119,
-  "son": 172,
+  "son": 194,
   "kayitlar": [
     {
       "zaman": "2026-11-16T19:53",
@@ -1429,6 +1429,26 @@
       "sehir_fiyat": {
         "Adana": 172,
         "İstanbul": 194
+      }
+    },
+    {
+      "zaman": "2026-11-25T15:05",
+      "fiyat": 194,
+      "ucus": "20 Ara · AJet · Berlin (BER) → İstanbul (SAW) · 17:05-22:05 · 🚆 Hannover'dan ~1 sa 40 dk · tahmini valiz ücretiyle (valizsiz 164 €)",
+      "gunler": {
+        "19 Ara": 195,
+        "20 Ara": 194,
+        "21 Ara": 195,
+        "22 Ara": 204,
+        "23 Ara": 194
+      },
+      "sehirler": {
+        "İstanbul": "194 € 20 Ara Berlin→SAW AJet 17:05",
+        "Adana": "210 € 23 Ara Berlin→COV SunExpress 07:30"
+      },
+      "sehir_fiyat": {
+        "İstanbul": 194,
+        "Adana": 210
       }
     }
   ]
