@@ -1830,6 +1830,26 @@
         "Adana": 190,
         "İstanbul": 194
       }
+    },
+    {
+      "zaman": "2026-11-26T13:06",
+      "fiyat": 190,
+      "ucus": "23 Ara · SunExpress · Berlin (BER) → Adana (COV) · 07:30-13:00 · 🚆 Hannover'dan ~1 sa 40 dk · valiz dahil paketi (valizsiz 190 €)",
+      "gunler": {
+        "19 Ara": 212,
+        "20 Ara": 194,
+        "21 Ara": 204,
+        "22 Ara": 204,
+        "23 Ara": 190
+      },
+      "sehirler": {
+        "Adana": "190 € 23 Ara Berlin→COV SunExpress 07:30",
+        "İstanbul": "194 € 20 Ara Berlin→SAW AJet 13:40"
+      },
+      "sehir_fiyat": {
+        "Adana": 190,
+        "İstanbul": 194
+      }
     }
   ]
 }
