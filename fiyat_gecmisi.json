@@ -2230,6 +2230,26 @@
         "İstanbul": 185,
         "Adana": 210
       }
+    },
+    {
+      "zaman": "2026-11-27T13:17",
+      "fiyat": 185,
+      "ucus": "21 Ara · AJet · Hannover (HAJ) → İstanbul (SAW) · 15:40-21:00 · 🚆 Hannover'dan S-Bahn 18 dk · tahmini valiz ücretiyle (valizsiz 155 €)",
+      "gunler": {
+        "19 Ara": 211,
+        "20 Ara": 214,
+        "21 Ara": 185,
+        "22 Ara": 210,
+        "23 Ara": 190
+      },
+      "sehirler": {
+        "İstanbul": "185 € 21 Ara Hannover→SAW AJet 15:40",
+        "Adana": "190 € 23 Ara Berlin→COV SunExpress 07:30"
+      },
+      "sehir_fiyat": {
+        "İstanbul": 185,
+        "Adana": 190
+      }
     }
   ]
 }
