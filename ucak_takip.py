@@ -11,7 +11,8 @@ olarak telefona da) gönderir.
 Valizli fiyat nasıl bulunuyor:
   1. Google'ın rezervasyon sayfasında havayolunun "kayıtlı bagaj ücretsiz"
      paketi varsa (Pegasus Saver gibi) onun fiyatı alınır  -> kesin fiyat
-  2. Yoksa (AJet gibi) bilet fiyatına aşağıdaki VALIZ_UCRETI eklenir -> tahmini
+  2. VALIZ_DAHIL'deki havayollarında (AJet Basic) bilet fiyatı zaten valizli -> kesin
+  3. Yoksa bilet fiyatına aşağıdaki VALIZ_UCRETI eklenir -> tahmini
 
 
 Kullanım:
@@ -56,10 +57,13 @@ HER_KONTROLDE_OZET = True       # True: fiyat değişmese de her kontrolde kısa
 # Google valizli paket fiyatı göstermezse bilete eklenecek tahmini 20 kg valiz ücreti (TL, tek yön, iç hat, online).
 # Havayolu kodu -> ücret. Gerçek ücreti öğrenirsen buradan düzeltebilirsin.
 VALIZ_UCRETI = {
-    "VF": 600,  # AJet (tahmini; Google AJet'in valizli paketini göstermiyor)
     "PC": 600,  # Pegasus (genelde Google'da Saver paketi çıkıyor, bu sadece yedek)
 }
-VARSAYILAN_VALIZ_UCRETI = 700    # Listede olmayan havayolları için
+VARSAYILAN_VALIZ_UCRETI = 700
+# En ucuz paketinde zaten valiz hakkı olan havayolları: bilet fiyatı = valizli fiyat (kesin)
+VALIZ_DAHIL = {
+    "VF": "Basic",   # AJet iç hat Basic paketinde valiz hakkı var
+}    # Listede olmayan havayolları için
 
 # Telefona bildirim (isteğe bağlı): telefona "ntfy" uygulamasını kur,
 # uygulamada aşağıdaki konuya abone ol. Boş bırakırsan sadece bilgisayara bildirim gelir.
@@ -336,6 +340,9 @@ def varis_sehri(u: dict) -> str:
 def valizli_fiyatlari_hesapla(ucuslar: list[dict]) -> None:
     """Her uçuşa 'valizli' ve 'valiz_kaynak' ekler. Ucuzdan pahalıya bakar, gereksizleri atlar."""
     ucuslar.sort(key=lambda x: x["fiyat"])
+    for u in ucuslar:
+        if u["kod"] in VALIZ_DAHIL:
+            u["valizli"], u["valiz_kaynak"] = u["fiyat"], VALIZ_DAHIL[u["kod"]]
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -372,6 +379,8 @@ def valizli_fiyatlari_hesapla(ucuslar: list[dict]) -> None:
         sayfa = tarayici.new_page(locale="tr-TR")
         for u in ucuslar:
             anahtar = (u["tarih"], varis_sehri(u))
+            if u.get("valiz_kaynak") in VALIZ_DAHIL.values():
+                continue  # fiyatı zaten kesin; diğer uçuşların gerçek valizli fiyatı da görünsün diye budamaya katılmıyor
             # Valizli fiyat bilet fiyatından düşük olamaz: bilet fiyatı o gün/şehrin en iyisinden pahalıysa bakmaya gerek yok
             if anahtar in en_iyi and u["fiyat"] >= en_iyi[anahtar]:
                 continue
