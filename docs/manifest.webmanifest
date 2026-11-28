@@ -1,7 +1,7 @@
 {
   "name": "Bilet Takip",
   "short_name": "Bilet Takip",
-  "description": "Hannover çevresinden İstanbul ve Adana'ya valizli uçak bileti fiyat takibi",
+  "description": "Valizli uçak bileti fiyat takibi",
   "lang": "tr",
   "start_url": "./",
   "scope": "./",

@@ -1,8 +1,8 @@
 """Uçak bileti fiyat takipçisi (20 kg valiz dahil, sadece direkt uçuşlar).
 
-Kalkış: Hannover'dan tek trenle (aktarmasız) gidilebilen şehirlerin havalimanları
-Varış:  İstanbul (IST, SAW) ve Adana (Çukurova COV, Şakirpaşa ADA)
-Tarih:  19-23 Aralık
+Kalkış: İstanbul Sabiha Gökçen (SAW)
+Varış:  Ordu-Giresun (OGU)
+Tarih:  30-31 Aralık, 1-2 Ocak
 
 Google Flights'tan tüm direkt uçuşları çeker, her uçuş için "1 büyük valiz dahil"
 fiyatı bulur ve en ucuz valizli fiyat düştüğünde Windows bildirimi (isteğe bağlı
@@ -13,7 +13,6 @@ Valizli fiyat nasıl bulunuyor:
      paketi varsa (Pegasus Saver gibi) onun fiyatı alınır  -> kesin fiyat
   2. Yoksa (AJet gibi) bilet fiyatına aşağıdaki VALIZ_UCRETI eklenir -> tahmini
 
-Not: Tren bileti fiyata dahil DEĞİL. Tren süreleri yaklaşıktır.
 
 Kullanım:
     py ucak_takip.py            -> şimdi bir kez kontrol et
@@ -38,45 +37,34 @@ from primp import Client
 from selectolax.lexbor import LexborHTMLParser
 
 # ---------------- AYARLAR ----------------
-# Hannover Hbf'den aktarmasız trenle gidilebilen şehirlerin havalimanları.
-# Kod -> (şehir, Hannover'dan yaklaşık tren süresi). İstemediğin satırı silebilir ya da başına # koyabilirsin.
+# Kalkış havalimanları: kod -> (şehir, not). Not alanı boş kalabilir.
 KALKIS = {
-    "HAJ": ("Hannover", "S-Bahn 18 dk"),
-    "BRE": ("Bremen", "~1 sa"),
-    "KSF": ("Kassel", "~1 sa"),
-    "HAM": ("Hamburg", "~1 sa 20 dk"),
-    "BER": ("Berlin", "~1 sa 40 dk"),
-    "DTM": ("Dortmund", "~1 sa 45 dk"),
-    "FRA": ("Frankfurt", "~2 sa 20 dk"),
-    "DUS": ("Düsseldorf", "~2 sa 30 dk"),
-    "CGN": ("Köln", "~2 sa 45 dk"),
+    "SAW": ("İstanbul", ""),
 }
 VARIS = {
-    "IST": "İstanbul",
-    "SAW": "İstanbul",
-    "COV": "Adana",   # Çukurova Havalimanı (Adana uçuşları 2024'ten beri buraya iniyor)
-    "ADA": "Adana",   # Şakirpaşa (şu an tarifeli uçuş yok, gelirse otomatik görünür)
+    "OGU": "Ordu",    # Ordu-Giresun Havalimanı
 }
-ASIL_TARIH = "2026-12-21"
-GUN_ESNEKLIGI = 2               # Asıl tarihin 2 gün öncesi ve sonrası da aranır (19-23 Aralık)
-PARA_BIRIMI = "EUR"
+TARIHLER = ["2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02"]
+ASIL_TARIH = "2026-12-31"       # Uygulamada çerçeveli gösterilen gün
+PARA_BIRIMI = "TRY"
+PARA_SEMBOL = "TL"
 HEDEF_FIYAT = 0                 # Örn. 200 yaparsan valizli fiyat 200'ün altına inince her seferinde haber verir (0 = kapalı)
 SADECE_DIREKT = True            # True: sadece aktarmasız uçuşlar
 KONTROL_SAAT_ARALIGI = 1        # --kur ile kaç saatte bir kontrol edilsin
 HER_KONTROLDE_OZET = True       # True: fiyat değişmese de her kontrolde kısa özet bildirimi gönder
 
-# Google valizli paket fiyatı göstermezse bilete eklenecek tahmini 20 kg valiz ücreti (€, tek yön, online).
+# Google valizli paket fiyatı göstermezse bilete eklenecek tahmini 20 kg valiz ücreti (TL, tek yön, iç hat, online).
 # Havayolu kodu -> ücret. Gerçek ücreti öğrenirsen buradan düzeltebilirsin.
 VALIZ_UCRETI = {
-    "VF": 30,   # AJet / Anadolu Jet (tahmini; kaynaklar 25-35 € diyor)
-    "PC": 35,   # Pegasus (genelde Google'da Saver paketi çıkıyor, bu sadece yedek)
+    "VF": 600,  # AJet (tahmini; Google AJet'in valizli paketini göstermiyor)
+    "PC": 600,  # Pegasus (genelde Google'da Saver paketi çıkıyor, bu sadece yedek)
 }
-VARSAYILAN_VALIZ_UCRETI = 50    # Listede olmayan havayolları için
+VARSAYILAN_VALIZ_UCRETI = 700    # Listede olmayan havayolları için
 
 # Telefona bildirim (isteğe bağlı): telefona "ntfy" uygulamasını kur,
 # uygulamada aşağıdaki konuya abone ol. Boş bırakırsan sadece bilgisayara bildirim gelir.
 NTFY_KONU = os.environ.get("NTFY_KONU") or "ucak-haj-ist-0f8d133f"
-ULKE = "DE"                     # Google'a hangi ülkeden bilet alınacağını söyler (arkadaşın Almanya'da)
+ULKE = "TR"                     # Google'a hangi ülkeden bilet alınacağını söyler
 # -----------------------------------------
 
 BULUT = os.environ.get("GITHUB_ACTIONS") == "true"   # GitHub'da çalışırken Windows'a özel şeyler kapalı
@@ -98,8 +86,12 @@ GECMIS_SURUMU = 3
 
 
 def tarihler() -> list[str]:
-    merkez = dt.date.fromisoformat(ASIL_TARIH)
-    return [(merkez + dt.timedelta(days=d)).isoformat() for d in range(-GUN_ESNEKLIGI, GUN_ESNEKLIGI + 1)]
+    return list(TARIHLER)
+
+
+def para(x) -> str:
+    """1601 -> '1.601 TL'"""
+    return f"{x:,}".replace(",", ".") + f" {PARA_SEMBOL}"
 
 
 def tarih_kisa(t: str) -> str:
@@ -292,7 +284,7 @@ def ucuslari_getir(tarih: str, kalkislar: list[str], varislar: list[str]) -> lis
 # ---------- Google Flights: rezervasyon sayfası (valizli paketler) ----------
 
 def _fiyat(metin: str) -> int | None:
-    m = re.search(r"€\s?([\d.]+)", metin)
+    m = re.search(r"(?:€|₺)\s?([\d.]+)", metin)
     return int(m.group(1).replace(".", "")) if m else None
 
 
@@ -323,7 +315,7 @@ def valizli_fiyat_sayfadan(sayfa, u: dict) -> tuple[int | None, str]:
             f = _fiyat(blok)
             if f and (en_iyi is None or f < en_iyi):
                 satirlar = [s.strip() for s in blok.strip().splitlines() if s.strip()]
-                ad = next((satirlar[i - 1] for i, s in enumerate(satirlar) if s.startswith("€") and i > 0), "")
+                ad = next((satirlar[i - 1] for i, s in enumerate(satirlar) if s.startswith(("€", "₺")) and i > 0), "")
                 en_iyi, paket = f, ad
     # Paket yok ama uçuşun kendisi zaten valizli ise (örn. THY bazı tarifeler)
     if en_iyi is None and ("kayıtlı bagaj ücretsiz" in ust or "kayıtlı bagaj dahil" in ust):
@@ -474,14 +466,14 @@ def kalkis_sehri(u: dict) -> str:
 
 
 def ozet(u: dict) -> str:
-    sehir, tren = KALKIS.get(u["nereden"], (u["nereden"], "?"))
+    sehir, tren = KALKIS.get(u["nereden"], (u["nereden"], ""))
     kaynak = "tahmini valiz ücretiyle" if u["valiz_kaynak"] == "tahmini" else u["valiz_kaynak"].replace("Google: ", "") + " paketi"
     return (f"{tarih_kisa(u['tarih'])} · {u['havayolu']} · {sehir} ({u['nereden']}) → {varis_sehri(u)} ({u['nereye']}) · "
-            f"{u['kalkis']}-{u['varis']} · 🚆 Hannover'dan {tren} · {kaynak} (valizsiz {u['fiyat']} €)")
+            f"{u['kalkis']}-{u['varis']} · {kaynak} (valizsiz {para(u['fiyat'])})")
 
 
 def kisa(u: dict) -> str:
-    return f"{u['valizli']} € {tarih_kisa(u['tarih'])} {kalkis_sehri(u)}→{u['nereye']} {u['havayolu']} {u['kalkis']}"
+    return f"{para(u['valizli'])} {tarih_kisa(u['tarih'])} {kalkis_sehri(u)}→{u['nereye']} {u['havayolu']} {u['kalkis']}"
 
 
 def uygulama_verisi_yaz(ucuslar: list[dict], g: dict) -> None:
@@ -507,6 +499,7 @@ def uygulama_verisi_yaz(ucuslar: list[dict], g: dict) -> None:
         "guncelleme": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "tarihler": tarihler(),
         "asil_tarih": ASIL_TARIH,
+        "para": PARA_SEMBOL,
         "kalkis": {k: list(v) for k, v in KALKIS.items()},
         "taranan": len(ucuslar),
         "en_ucuz": sade(ucuslar[0]),
@@ -584,7 +577,7 @@ def kontrol() -> None:
     if eksik and (onceki_son is None or fiyat >= onceki_son):
         # Bazı şehirler taranamadı: bulunan fiyat gerçek en ucuz olmayabilir, yanlış "arttı" demeyelim.
         # (Daha ucuz bir fiyat bulunduysa o gerçektir, aşağıda normal şekilde bildirilir.)
-        log(f"Tarama eksik kaldı (bulunan en ucuz {fiyat} €), kayıt ve bildirim bu sefer atlandı.")
+        log(f"Tarama eksik kaldı (bulunan en ucuz {para(fiyat)}), kayıt ve bildirim bu sefer atlandı.")
         return
     g["kayitlar"].append({
         "zaman": dt.datetime.now().isoformat(timespec="minutes"),
@@ -601,28 +594,28 @@ def kontrol() -> None:
     gecmis_yaz(g)
     uygulama_verisi_yaz(ucuslar, g)
 
-    gun_yazi = " | ".join(f"{tarih_kisa(t)}: {f}€" for t, f in sorted(gun_bazli.items()))
+    gun_yazi = " | ".join(f"{tarih_kisa(t)}: {para(f)}" for t, f in sorted(gun_bazli.items()))
     sehir_yazi = " · ".join(f"{s}: {kisa(u)}" for s, u in sehir_bazli.items())
     log(f"En ucuz valizli: {fiyat} {PARA_BIRIMI} — {ozet(en_ucuz)} (önceki: {onceki_son}, en düşük: {onceki_en_dusuk})")
     log(f"Varış şehrine göre: {sehir_yazi}")
     log(f"Günlere göre: {gun_yazi}  ({len(ucuslar)} direkt uçuş tarandı)")
 
     if onceki_en_dusuk is None:
-        bildir(f"✈️ Takip başladı: valizli {fiyat} €", f"{ozet(en_ucuz)}\n{sehir_yazi}", link)
+        bildir(f"✈️ Takip başladı: valizli {para(fiyat)}", f"{ozet(en_ucuz)}\n{sehir_yazi}", link)
     elif fiyat < onceki_en_dusuk:
-        bildir(f"🔥 Fiyat düştü! {onceki_en_dusuk} € → {fiyat} € (valizli)",
+        bildir(f"🔥 Fiyat düştü! {para(onceki_en_dusuk)} → {para(fiyat)} (valizli)",
                f"Şimdiye kadarki en ucuz. {ozet(en_ucuz)}", link)
     elif onceki_son is not None and fiyat < onceki_son:
-        bildir(f"⬇️ Fiyat indi: {onceki_son} € → {fiyat} € (valizli)",
-               f"(En düşük görülen: {onceki_en_dusuk} €) {ozet(en_ucuz)}", link)
+        bildir(f"⬇️ Fiyat indi: {para(onceki_son)} → {para(fiyat)} (valizli)",
+               f"(En düşük görülen: {para(onceki_en_dusuk)}) {ozet(en_ucuz)}", link)
     elif HEDEF_FIYAT and fiyat <= HEDEF_FIYAT:
-        bildir(f"🎯 Hedefin altında: valizli {fiyat} €", ozet(en_ucuz), link)
+        bildir(f"🎯 Hedefin altında: valizli {para(fiyat)}", ozet(en_ucuz), link)
     elif HER_KONTROLDE_OZET:
         if onceki_son is not None and fiyat > onceki_son:
-            durum = f"⬆️ arttı ({onceki_son} € → {fiyat} €)"
+            durum = f"⬆️ arttı ({para(onceki_son)} → {para(fiyat)})"
         else:
             durum = "değişiklik yok"
-        bildir(f"🕐 {dt.datetime.now():%H:%M} kontrolü: valizli en ucuz {fiyat} € ({durum})", sehir_yazi, link)
+        bildir(f"🕐 {dt.datetime.now():%H:%M} kontrolü: valizli en ucuz {para(fiyat)} ({durum})", sehir_yazi, link)
 
 
 def gecmisi_goster() -> None:
@@ -634,7 +627,7 @@ def gecmisi_goster() -> None:
         print(f"{k['zaman']}  {k['fiyat']:>5} {PARA_BIRIMI}  {k['ucus']}")
         for s, y in k.get("sehirler", {}).items():
             print(f"                  {s}: {y}")
-        print("                  Günler: " + " | ".join(f"{t}: {f}€" for t, f in k["gunler"].items()))
+        print("                  Günler: " + " | ".join(f"{t}: {para(f)}" for t, f in k["gunler"].items()))
     print(f"\nEn düşük görülen valizli fiyat: {g['en_dusuk']} {PARA_BIRIMI}")
 
 

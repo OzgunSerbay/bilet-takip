@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bilet Takip</title>
-<meta name="description" content="Hannover çevresinden İstanbul ve Adana'ya valizli uçak bileti fiyat takibi">
+<meta name="description" content="Valizli uçak bileti fiyat takibi">
 <meta name="theme-color" content="#0f6fff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -127,7 +127,8 @@
 <script>
 const AYLAR = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const GUNLER = ["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
-const RENK = { "İstanbul": "var(--c-ist)", "Adana": "var(--c-ada)" };
+const RENK = { "İstanbul": "var(--c-ist)", "Adana": "var(--c-ada)", "Ordu": "var(--c-ist)" };
+const para = (x) => `${Number(x).toLocaleString("tr-TR")} ${state.data?.para || "€"}`;
 const state = { data: null, city: "Tümü", day: null, showAll: false };
 
 const $ = (s) => document.querySelector(s);
@@ -144,7 +145,7 @@ function once(iso) {
   if (sa < 24) return `${sa} sa ${dk % 60 ? (dk % 60) + " dk " : ""}önce`;
   return `${Math.floor(sa / 24)} gün önce`;
 }
-const havalimani = { IST: "İstanbul Havalimanı", SAW: "Sabiha Gökçen", COV: "Çukurova", ADA: "Şakirpaşa" };
+const havalimani = { IST: "İstanbul Havalimanı", SAW: "Sabiha Gökçen", COV: "Çukurova", ADA: "Şakirpaşa", OGU: "Ordu-Giresun" };
 
 function flights() {
   let list = state.data.ucuslar;
@@ -180,20 +181,20 @@ function render() {
   $("#app").innerHTML = `
     ${yasli && !["baslatiliyor", "calisiyor"].includes(state.arama.durum) ? `<div class="banner">⚠️ Son kontrol ${once(d.guncelleme)} yapıldı. GitHub'daki otomatik kontrol gecikmiş olabilir.${anahtar.al() ? " ↻ tuşuyla yeni arama başlatabilirsin." : " Yukarıdan anahtar eklersen uygulama yenileyince kendisi arar."}</div>` : ""}
 
-    <div class="tabs" role="tablist">
+    ${cities.length > 2 ? `<div class="tabs" role="tablist">
       ${cities.map(c => `<button class="${c === state.city ? "on" : ""}" data-city="${esc(c)}">${esc(c)}</button>`).join("")}
-    </div>
+    </div>` : ""}
 
     ${best ? `
     <section class="card hero">
       <div class="label">En ucuz${state.city !== "Tümü" ? " · " + esc(state.city) : ""} · 20 kg valiz dahil</div>
-      <div class="price">${best.valizli} <small>€</small></div>
+      <div class="price">${Number(best.valizli).toLocaleString("tr-TR")} <small>${esc(d.para || "€")}</small></div>
       <div class="route">${esc(best.nereden_sehir)} → ${esc(best.varis_sehir)} <span class="meta">(${esc(havalimani[best.nereye] || best.nereye)})</span></div>
       <div class="meta">${tarih(best.tarih, true)} · ${best.kalkis}–${best.varis} · ${esc(best.havayolu)} ${esc(best.ucus_no)}</div>
       <div class="chips">
-        <span class="chip">🚆 Hannover'dan ${esc(best.tren)}</span>
+        ${best.tren ? `<span class="chip">🚆 ${esc(best.tren)}</span>` : ""}
         ${best.kesin ? `<span class="chip good">✓ Kesin fiyat · ${esc(best.paket)}</span>` : `<span class="chip warn">≈ Valiz ücreti tahmini</span>`}
-        <span class="chip">Valizsiz ${best.fiyat} €</span>
+        <span class="chip">Valizsiz ${para(best.fiyat)}</span>
       </div>
       <a class="btn-primary" href="${esc(best.link)}" target="_blank" rel="noopener">Bileti gör</a>
     </section>` : `<section class="card empty">Bu seçim için uçuş bulunamadı.</section>`}
@@ -207,7 +208,7 @@ function render() {
           const p = gunFiyat[t];
           const cls = ["day", t === d.asil_tarih ? "main" : "", p != null && p === enIyiGun ? "best" : "", state.day === t ? "on" : ""].join(" ");
           return `<button class="${cls}" data-day="${t}"><div class="d">${tarih(t, false)}<br>${GUNLER[new Date(t + "T12:00:00").getDay()]}</div>
-            <div class="p">${p != null ? p + "€" : `<span class="none">yok</span>`}</div></button>`;
+            <div class="p">${p != null ? para(p) : `<span class="none">yok</span>`}</div></button>`;
         }).join("")}
       </div>
       <div class="legend"><span>Çerçeveli: asıl tarih (${tarih(d.asil_tarih)})</span><span>Dokun: o günü filtrele</span></div>
@@ -222,9 +223,9 @@ function render() {
           <div>
             <div class="r">${esc(f.nereden_sehir)} → ${esc(f.varis_sehir)} <span class="m">${esc(f.nereye)}</span></div>
             <div class="m">${tarih(f.tarih, true)} · ${f.kalkis}–${f.varis} · ${esc(f.havayolu)}</div>
-            <div class="m">🚆 ${esc(f.tren)} · ${f.kesin ? "kesin fiyat" : "valiz tahmini"}</div>
+            <div class="m">${f.tren ? "🚆 " + esc(f.tren) + " · " : ""}${f.kesin ? "kesin fiyat" : "valiz tahmini"}</div>
           </div>
-          <div class="pr">${f.valizli} €<small>valizsiz ${f.fiyat} €</small></div>
+          <div class="pr">${para(f.valizli)}<small>valizsiz ${para(f.fiyat)}</small></div>
         </a>`).join("") : `<div class="empty">Bu seçim için uçuş yok.</div>`}
       ${list.length > 8 ? `<button class="more" id="more">${state.showAll ? "Daha az göster" : `Tümünü göster (${list.length})`}</button>` : ""}
     </section>
@@ -234,7 +235,7 @@ function render() {
       ${anahtar.al() ? `<div class="topic" style="margin-bottom:10px"><span style="flex:1">🔄 Yenileyince arama açık: uygulamayı açınca son aramadan ${TAZE_DK} dk geçtiyse, ↻ tuşunda her zaman yeni arama başlar.</span><button class="ghost" id="anahtar-sil">Anahtarı sil</button></div>` : ""}
       <p>İstersen bildirimleri <b>ntfy</b> uygulamasıyla da alabilirsin; ntfy'da şu konuya abone ol:</p>
       <div class="topic"><code id="topic">${esc(d.ntfy)}</code><button id="copy">Kopyala</button></div>
-      <p style="margin-top:12px">Fiyatlar Google Uçuşlar'dan, 1 yetişkin, tek yön, sadece direkt uçuşlar. Tren bileti fiyata dahil değil; tren süreleri yaklaşık. "Kesin" fiyatlar havayolunun valizli paketinden gelir; diğerlerinde bilete tahmini valiz ücreti eklenmiştir.</p>
+      <p style="margin-top:12px">Fiyatlar Google Uçuşlar'dan, 1 yetişkin, tek yön, sadece direkt uçuşlar. "Kesin" fiyatlar havayolunun valizli paketinden gelir; diğerlerinde bilete tahmini valiz ücreti eklenmiştir.</p>
     </section>
   `;
 
@@ -259,12 +260,13 @@ function render() {
 function chart(d) {
   const pts = d.gecmis.filter(g => g.s && Object.keys(g.s).length);
   if (pts.length < 2) return `<section class="card"><h2>Fiyat geçmişi</h2><div class="empty">Grafik birkaç kontrol sonra görünecek (${pts.length} kayıt var).</div></section>`;
-  const sehirler = state.city === "Tümü" ? Object.keys(RENK).filter(c => pts.some(p => p.s[c] != null)) : [state.city];
-  const W = 360, H = 150, P = { l: 30, r: 6, t: 10, b: 20 };
+  const sehirler = state.city === "Tümü" ? Object.keys(d.sehirler).filter(c => pts.some(p => p.s[c] != null)) : [state.city];
+  const W = 360, H = 150, P = { l: 44, r: 6, t: 10, b: 20 };
   const vals = pts.flatMap(p => sehirler.map(c => p.s[c]).filter(v => v != null));
   if (!vals.length) return "";
   let lo = Math.min(...vals), hi = Math.max(...vals);
-  if (hi - lo < 10) { lo -= 5; hi += 5; }
+  const pay = Math.max(5, Math.round(hi * 0.03));
+  if (hi - lo < 2 * pay) { lo -= pay; hi += pay; }
   const t0 = new Date(pts[0].t).getTime(), t1 = new Date(pts[pts.length - 1].t).getTime();
   const x = t => P.l + (W - P.l - P.r) * ((new Date(t).getTime() - t0) / Math.max(1, t1 - t0));
   const y = v => P.t + (H - P.t - P.b) * (1 - (v - lo) / (hi - lo));
@@ -273,7 +275,7 @@ function chart(d) {
     return `<polyline fill="none" stroke="${RENK[c] || "var(--accent)"}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="${seg}"/>`;
   }).join("");
   const grid = [lo, (lo + hi) / 2, hi].map(v => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/>
-    <text x="${P.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${Math.round(v)}</text>`).join("");
+    <text x="${P.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${Math.round(v).toLocaleString("tr-TR")}</text>`).join("");
   const fmt = t => { const z = new Date(t); return `${z.getDate()} ${AYLAR[z.getMonth()]} ${String(z.getHours()).padStart(2, "0")}:${String(z.getMinutes()).padStart(2, "0")}`; };
   return `<section class="card"><h2>Fiyat geçmişi <span class="sub">(valizli en ucuz)</span></h2>
     <svg class="chart" viewBox="0 0 ${W} ${H}">${grid}${lines}

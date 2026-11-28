@@ -118,7 +118,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$(TZ=Europe/Istanbul date +%Y%m%d)" -gt 20261223 ]; then
+          if [ "$(TZ=Europe/Istanbul date +%Y%m%d)" -gt 20270102 ]; then
             echo "Uçuş tarihleri geçti, zincir durduruldu."
             exit 0
           fi
